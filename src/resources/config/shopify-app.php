@@ -587,7 +587,7 @@ return [
          * Available levels: FULL, PARTIAL, UNSUPPORTED.
          */
         'unacceptable_levels' => [
-            Osiset\ShopifyApp\Objects\Enums\ThemeSupportLevel::UNSUPPORTED,
+            Osiset\ShopifyApp\Objects\Enums\ThemeSupportLevel::UNSUPPORTED->value,
         ],
     ],
 
