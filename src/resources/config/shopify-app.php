@@ -266,6 +266,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Offline refresh token renewal window (days)
+    |--------------------------------------------------------------------------
+    |
+    | When running shopify-app:refresh-expiring-offline-tokens, shops whose
+    | refresh token expires within this many days are queued for renewal.
+    | Also used by OfflineAccessTokenRefresher to trigger proactive refresh.
+    |
+    */
+
+    'offline_refresh_token_renewal_days' => (int) env('SHOPIFY_OFFLINE_REFRESH_TOKEN_RENEWAL_DAYS', 14),
+
+    /*
+    |--------------------------------------------------------------------------
     | Shopify API Redirect
     |--------------------------------------------------------------------------
     |

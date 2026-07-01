@@ -13,6 +13,7 @@ You are enabling or operating **Shopify expiring offline access tokens** in **yo
 - `SHOPIFY_AUTO_MIGRATE_LEGACY` → `auto_migrate_legacy` — when `true` (default), legacy shops are migrated on-the-fly before the first `apiHelper()` call; failures fail open (logged warning, legacy token kept).
 - `SHOPIFY_REFRESH_OFFLINE_TOKEN_BEFORE_API_CALL` → `refresh_offline_token_before_api_call` — when `true`, each `api()` / `apiHelper()` call re-checks token expiry and rebuilds the cached client if within the refresh skew (for long-running jobs).
 - `SHOPIFY_OFFLINE_ACCESS_TOKEN_REFRESH_SKEW` → `offline_access_token_refresh_skew_seconds` — refresh this many seconds **before** access token expiry.
+- `SHOPIFY_OFFLINE_REFRESH_TOKEN_RENEWAL_DAYS` → `offline_refresh_token_renewal_days` — shops whose refresh token expires within this many days are queued for renewal by the refresh CLI (default `14`).
 
 Read the package README for policy notes (e.g. public apps after Shopify’s cutoff dates).
 
@@ -44,6 +45,20 @@ Enabling the flag does **not** upgrade shops that only have a legacy non-expirin
 - **`php artisan shopify-app:migrate-expiring-offline-tokens`** — optional CLI (`--dry-run`, `--shop=`). Chunks shops and dispatches queue jobs (Vapor/serverless-safe). Success revokes the old offline token (one-way).
 
 Alternative: merchant re-auth (OAuth or session token exchange) also acquires expiring tokens when the flag is on.
+
+## Proactive renewal for dormant shops (optional)
+
+Refresh tokens expire after ~90 days. Shops with no API activity can lapse if nothing triggers a refresh.
+
+- **`Osiset\ShopifyApp\Messaging\Jobs\RefreshShopOfflineTokenJob`** — dispatched by the refresh Artisan command; one shop per job.
+- **`php artisan shopify-app:refresh-expiring-offline-tokens`** — optional CLI (`--dry-run`, `--shop=`, `--days=`). Queues renewal for shops whose refresh token expires within `offline_refresh_token_renewal_days` (default 14).
+- **Scheduler:** the package does **not** auto-register a schedule. In **your** app:
+
+```php
+Schedule::command('shopify-app:refresh-expiring-offline-tokens')->daily();
+```
+
+Active shops with regular webhooks or API calls are refreshed automatically and usually do not need this.
 
 ## Operational notes
 
