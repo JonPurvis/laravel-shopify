@@ -26,11 +26,20 @@ class RefreshExpiringOfflineTokensCommand extends Command
 
         $modelClass = Util::getShopifyConfig('user_model');
         $shopDomain = $this->option('shop');
-        $days = $this->option('days') !== null
-            ? (int) $this->option('days')
+
+        $daysOption = $this->option('days');
+        $days = $daysOption !== null
+            ? (int) $daysOption
             : (int) Util::getShopifyConfig('offline_refresh_token_renewal_days');
 
-        $threshold = Carbon::now()->addDays($days);
+        if ($days < 0) {
+            $this->error('--days must be 0 or greater.');
+
+            return self::FAILURE;
+        }
+
+        $now = Carbon::now();
+        $threshold = $now->copy()->addDays($days);
 
         $query = $modelClass::query()
             ->whereNotNull('password')
@@ -38,8 +47,7 @@ class RefreshExpiringOfflineTokensCommand extends Command
             ->whereNotNull('shopify_offline_refresh_token')
             ->where('shopify_offline_refresh_token', '!=', '')
             ->whereNotNull('shopify_offline_refresh_token_expires_at')
-            ->where('shopify_offline_refresh_token_expires_at', '<=', $threshold);
-
+            ->whereBetween('shopify_offline_refresh_token_expires_at', [$now, $threshold]);
         if ($shopDomain) {
             $query->where('name', $shopDomain);
         }
