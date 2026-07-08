@@ -129,6 +129,9 @@ class OfflineAccessTokenRefresher
     /**
      * Whether the shop's offline refresh token expires within the renewal window.
      *
+     * Already-expired refresh tokens return false because they cannot be renewed
+     * via the refresh-token grant.
+     *
      * @param ShopModel  $shop
      * @param int|null   $renewalDays Override the renewal window in days (defaults to config)
      *
@@ -151,7 +154,14 @@ class OfflineAccessTokenRefresher
 
         $days = $renewalDays ?? (int) Util::getShopifyConfig('offline_refresh_token_renewal_days', $shop);
         $expires = $expiresAt instanceof Carbon ? $expiresAt : Carbon::parse((string) $expiresAt);
-        $threshold = Carbon::now()->addDays($days);
+        $now = Carbon::now();
+
+        // Expired refresh tokens cannot be renewed via the refresh-token grant.
+        if ($expires->lessThanOrEqualTo($now)) {
+            return false;
+        }
+
+        $threshold = $now->copy()->addDays($days);
 
         return $threshold->greaterThanOrEqualTo($expires);
     }

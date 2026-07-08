@@ -255,6 +255,21 @@ class OfflineAccessTokenRefresherTest extends TestCase
         $this->assertFalse(app(OfflineAccessTokenRefresher::class)->offlineRefreshTokenNeedsRenewal($shop));
     }
 
+    public function testOfflineRefreshTokenNeedsRenewalFalseWhenAlreadyExpired(): void
+    {
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', true);
+        $this->app['config']->set('shopify-app.offline_refresh_token_renewal_days', 14);
+
+        $shop = factory($this->model)->create([
+            'password' => 'shpat_old',
+            'shopify_offline_refresh_token' => Crypt::encryptString('shprt_old'),
+            'shopify_offline_access_token_expires_at' => Carbon::now()->addHour(),
+            'shopify_offline_refresh_token_expires_at' => Carbon::now()->subDay(),
+        ]);
+
+        $this->assertFalse(app(OfflineAccessTokenRefresher::class)->offlineRefreshTokenNeedsRenewal($shop));
+    }
+
     public function testOfflineRefreshTokenNeedsRenewalFalseWhenFeatureDisabled(): void
     {
         $this->app['config']->set('shopify-app.expiring_offline_tokens', false);

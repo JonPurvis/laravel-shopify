@@ -54,7 +54,7 @@ class RefreshExpiringOfflineTokensCommand extends Command
 
         if ($this->option('dry-run')) {
             $count = 0;
-            $query->chunk(100, function ($shops) use (&$count) {
+            $query->chunkById(100, function ($shops) use (&$count) {
                 foreach ($shops as $shop) {
                     $this->line('  - '.$shop->name.' (id: '.$shop->id.')');
                     $count++;
@@ -73,7 +73,7 @@ class RefreshExpiringOfflineTokensCommand extends Command
         $dispatched = 0;
         $failed = 0;
 
-        $query->chunk(100, function ($shops) use (&$dispatched, &$failed, $days) {
+        $query->chunkById(100, function ($shops) use (&$dispatched, &$failed, $days) {
             foreach ($shops as $shop) {
                 try {
                     RefreshShopOfflineTokenJob::dispatch($shop, $days);
