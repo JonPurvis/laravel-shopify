@@ -254,4 +254,62 @@ class Util
 
         return (bool) Arr::get($legacySupports, $feature, true);
     }
+
+    /**
+     * Constrain a token-redirect target to a same-origin relative path.
+     *
+     * @param string|null $target        The requested redirect target.
+     * @param string      $requestOrigin The current request origin (scheme + host + port).
+     *
+     * @return string A safe relative path (optionally with query string).
+     */
+    public static function sanitizeTokenRedirectTarget(?string $target, string $requestOrigin): string
+    {
+        if ($target === null || $target === '') {
+            return '/';
+        }
+
+        if (str_starts_with($target, '//')) {
+            return '/';
+        }
+
+        if (preg_match('#^(javascript|data|vbscript):#i', $target)) {
+            return '/';
+        }
+
+        if (str_starts_with($target, '/') && ! str_starts_with($target, '//')) {
+            return $target;
+        }
+
+        $parsed = parse_url($target);
+        if (! isset($parsed['scheme'], $parsed['host'])) {
+            return '/';
+        }
+
+        if (! in_array(strtolower($parsed['scheme']), ['http', 'https'], true)) {
+            return '/';
+        }
+
+        $requestParsed = parse_url($requestOrigin);
+        $targetHost = strtolower($parsed['host']);
+        $requestHost = strtolower($requestParsed['host'] ?? '');
+
+        $targetPort = $parsed['port'] ?? (strtolower($parsed['scheme']) === 'https' ? 443 : 80);
+        $requestPort = $requestParsed['port'] ?? (strtolower($requestParsed['scheme'] ?? 'http') === 'https' ? 443 : 80);
+
+        if ($targetHost !== $requestHost || $targetPort !== $requestPort) {
+            return '/';
+        }
+
+        $path = $parsed['path'] ?? '/';
+        if (! str_starts_with($path, '/')) {
+            $path = '/'.$path;
+        }
+
+        if (! empty($parsed['query'])) {
+            return $path.'?'.$parsed['query'];
+        }
+
+        return $path;
+    }
 }

@@ -48,7 +48,12 @@
 
                 shopify.idToken().then((token) => {
 
-                    let url = new URL(`{!! $target !!}`, window.location.origin);
+                    let url = new URL(@json($target), window.location.origin);
+
+                    if (url.origin !== window.location.origin) {
+                        url = new URL(@json($fallbackTarget), window.location.origin);
+                    }
+
                     // Enforce HTTPS if the current page is using HTTPS
                     if (window.location.protocol === 'https:') {
                         url.protocol = 'https:';
