@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Route;
 use Osiset\ShopifyApp\Exceptions\HttpException;
 use Osiset\ShopifyApp\Exceptions\SignatureVerificationException;
 use Osiset\ShopifyApp\Http\Middleware\VerifyShopify;
+use Osiset\ShopifyApp\Objects\Values\SessionToken;
 use Osiset\ShopifyApp\Test\TestCase;
 
 class VerifyShopifyTest extends TestCase
@@ -385,6 +386,27 @@ class VerifyShopifyTest extends TestCase
         $this->assertStringNotContainsString('/authenticate/token', $result[1]->getTargetUrl());
     }
 
+    public function testSpaApiRequestWithoutTokenReceivesInvalidTokenError(): void
+    {
+        $this->expectException(HttpException::class);
+        $this->expectExceptionMessage(SessionToken::EXCEPTION_INVALID);
+        $this->expectExceptionCode(Response::HTTP_BAD_REQUEST);
+
+        factory($this->model)->create(['name' => 'shop-name.myshopify.com']);
+        $this->app['config']->set('shopify-app.frontend_type', 'SPA');
+
+        $currentRequest = Request::instance();
+        $newRequest = $currentRequest->duplicate(
+            query: [],
+            server: [
+                'HTTP_X-Shop-Domain' => 'shop-name.myshopify.com',
+                'REQUEST_URI' => 'api/some/endpoint',
+            ]
+        );
+
+        $this->runMiddleware(VerifyShopify::class, $newRequest);
+    }
+
     public function testAccessingForbiddenMiddlewareRouteFromBrowserReceivedAccessError(): void
     {
         $this->expectException(HttpException::class);
@@ -397,14 +419,12 @@ class VerifyShopifyTest extends TestCase
         $this->app['config']->set('shopify-app.forbidden_web_middleware_groups', ['api']);
         $this->app['router']->get('/api/some/endpoint', fn () => true)->middleware(['api']);
 
-        // Setup the request
         $currentRequest = Request::instance();
         $newRequest = $currentRequest->duplicate(
             query: [
                 'shop' => 'shop-name.myshopify.com',
             ],
             server: [
-                'HTTP_Authorization' => "Bearer {$this->buildToken()}",
                 'REQUEST_URI' => 'api/some/endpoint',
             ]
         );

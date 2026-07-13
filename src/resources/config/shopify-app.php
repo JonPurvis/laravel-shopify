@@ -654,5 +654,19 @@ return [
     */
     'forbidden_web_middleware_groups' => [
         'api',
-    ]
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | API route prefixes
+    |--------------------------------------------------------------------------
+    |
+    | Path prefixes that identify API routes. A request whose path starts with
+    | one of these is treated as an API request even when it carries no bearer
+    | token and no AJAX/JSON headers (e.g. a browser opening the route directly).
+    |
+    */
+    'api_route_prefixes' => [
+        'api',
+    ],
 ];
