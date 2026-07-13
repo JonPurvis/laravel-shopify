@@ -224,4 +224,106 @@ class OfflineAccessTokenRefresherTest extends TestCase
 
         $this->assertFalse(app(OfflineAccessTokenRefresher::class)->offlineAccessTokenNeedsRefresh($shop));
     }
+
+    public function testOfflineRefreshTokenNeedsRenewalTrueWhenWithinWindow(): void
+    {
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', true);
+        $this->app['config']->set('shopify-app.offline_refresh_token_renewal_days', 14);
+
+        $shop = factory($this->model)->create([
+            'password' => 'shpat_old',
+            'shopify_offline_refresh_token' => Crypt::encryptString('shprt_old'),
+            'shopify_offline_access_token_expires_at' => Carbon::now()->addHour(),
+            'shopify_offline_refresh_token_expires_at' => Carbon::now()->addDays(7),
+        ]);
+
+        $this->assertTrue(app(OfflineAccessTokenRefresher::class)->offlineRefreshTokenNeedsRenewal($shop));
+    }
+
+    public function testOfflineRefreshTokenNeedsRenewalFalseWhenOutsideWindow(): void
+    {
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', true);
+        $this->app['config']->set('shopify-app.offline_refresh_token_renewal_days', 14);
+
+        $shop = factory($this->model)->create([
+            'password' => 'shpat_old',
+            'shopify_offline_refresh_token' => Crypt::encryptString('shprt_old'),
+            'shopify_offline_access_token_expires_at' => Carbon::now()->addHour(),
+            'shopify_offline_refresh_token_expires_at' => Carbon::now()->addDays(30),
+        ]);
+
+        $this->assertFalse(app(OfflineAccessTokenRefresher::class)->offlineRefreshTokenNeedsRenewal($shop));
+    }
+
+    public function testOfflineRefreshTokenNeedsRenewalFalseWhenAlreadyExpired(): void
+    {
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', true);
+        $this->app['config']->set('shopify-app.offline_refresh_token_renewal_days', 14);
+
+        $shop = factory($this->model)->create([
+            'password' => 'shpat_old',
+            'shopify_offline_refresh_token' => Crypt::encryptString('shprt_old'),
+            'shopify_offline_access_token_expires_at' => Carbon::now()->addHour(),
+            'shopify_offline_refresh_token_expires_at' => Carbon::now()->subDay(),
+        ]);
+
+        $this->assertFalse(app(OfflineAccessTokenRefresher::class)->offlineRefreshTokenNeedsRenewal($shop));
+    }
+
+    public function testOfflineRefreshTokenNeedsRenewalFalseWhenFeatureDisabled(): void
+    {
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', false);
+
+        $shop = factory($this->model)->create([
+            'password' => 'shpat_old',
+            'shopify_offline_refresh_token' => Crypt::encryptString('shprt_old'),
+            'shopify_offline_refresh_token_expires_at' => Carbon::now()->addDays(7),
+        ]);
+
+        $this->assertFalse(app(OfflineAccessTokenRefresher::class)->offlineRefreshTokenNeedsRenewal($shop));
+    }
+
+    public function testRefreshIfNeededWhenOnlyRefreshTokenWithinWindow(): void
+    {
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', true);
+        $this->app['config']->set('shopify-app.offline_refresh_token_renewal_days', 14);
+
+        $shop = factory($this->model)->create([
+            'password' => 'shpat_old',
+            'shopify_offline_refresh_token' => Crypt::encryptString('shprt_old'),
+            'shopify_offline_access_token_expires_at' => Carbon::now()->addHour(),
+            'shopify_offline_refresh_token_expires_at' => Carbon::now()->addDays(7),
+        ]);
+
+        $this->setApiStub();
+        ApiStub::stubResponses(['oauth_offline_refresh']);
+
+        app(OfflineAccessTokenRefresher::class)->refreshIfNeeded($shop);
+
+        $shop->refresh();
+
+        $this->assertSame('shpat_after_refresh', $shop->getAccessToken()->toNative());
+        $this->assertSame(
+            'shprt_after_refresh',
+            Crypt::decryptString($shop->shopify_offline_refresh_token)
+        );
+    }
+
+    public function testOfflineRefreshTokenNeedsRenewalHonorsRenewalDaysOverride(): void
+    {
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', true);
+        $this->app['config']->set('shopify-app.offline_refresh_token_renewal_days', 14);
+
+        $shop = factory($this->model)->create([
+            'password' => 'shpat_old',
+            'shopify_offline_refresh_token' => Crypt::encryptString('shprt_old'),
+            'shopify_offline_access_token_expires_at' => Carbon::now()->addHour(),
+            'shopify_offline_refresh_token_expires_at' => Carbon::now()->addDays(20),
+        ]);
+
+        $refresher = app(OfflineAccessTokenRefresher::class);
+
+        $this->assertFalse($refresher->offlineRefreshTokenNeedsRenewal($shop));
+        $this->assertTrue($refresher->offlineRefreshTokenNeedsRenewal($shop, 30));
+    }
 }
