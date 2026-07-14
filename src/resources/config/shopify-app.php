@@ -519,8 +519,9 @@ return [
     | Job Queues
     |--------------------------------------------------------------------------
     |
-    | This option is for setting a specific job queue for webhooks, scripttags
-    | and after_authenticate_job.
+    | This option is for setting a specific job queue for webhooks, scripttags,
+    | after_authenticate_job, and offline-token migrate/refresh batch jobs.
+    | Override per run with --queue= on the migrate/refresh Artisan commands.
     |
     */
 
@@ -528,14 +529,17 @@ return [
         'webhooks' => env('WEBHOOKS_JOB_QUEUE', null),
         'scripttags' => env('SCRIPTTAGS_JOB_QUEUE', null),
         'after_authenticate' => env('AFTER_AUTHENTICATE_JOB_QUEUE', null),
+        'migrate_expiring_offline_tokens' => env('SHOPIFY_MIGRATE_OFFLINE_TOKENS_JOB_QUEUE', null),
+        'refresh_expiring_offline_tokens' => env('SHOPIFY_REFRESH_OFFLINE_TOKENS_JOB_QUEUE', null),
     ],
     /*
     |--------------------------------------------------------------------------
     | Job Connections
     |--------------------------------------------------------------------------
     |
-    | This option is for setting a specific job connection for webhooks, scripttags
-    | and after_authenticate_job.
+    | This option is for setting a specific job connection for webhooks, scripttags,
+    | after_authenticate_job, and offline-token migrate/refresh batch jobs.
+    | Override per run with --connection= on the migrate/refresh Artisan commands.
     |
     */
 
@@ -543,6 +547,8 @@ return [
         'webhooks' => env('WEBHOOKS_JOB_CONNECTION', null),
         'scripttags' => env('SCRIPTTAGS_JOB_CONNECTION', null),
         'after_authenticate' => env('AFTER_AUTHENTICATE_JOB_CONNECTION', null),
+        'migrate_expiring_offline_tokens' => env('SHOPIFY_MIGRATE_OFFLINE_TOKENS_JOB_CONNECTION', null),
+        'refresh_expiring_offline_tokens' => env('SHOPIFY_REFRESH_OFFLINE_TOKENS_JOB_CONNECTION', null),
     ],
     /*
     |--------------------------------------------------------------------------
