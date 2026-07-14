@@ -3,6 +3,7 @@
 namespace Osiset\ShopifyApp\Console;
 
 use Illuminate\Console\Command;
+use Illuminate\Foundation\Bus\PendingDispatch;
 use Illuminate\Support\Carbon;
 use Osiset\ShopifyApp\Messaging\Jobs\RefreshShopOfflineTokenJob;
 use Osiset\ShopifyApp\Util;
@@ -12,7 +13,9 @@ class RefreshExpiringOfflineTokensCommand extends Command
     protected $signature = 'shopify-app:refresh-expiring-offline-tokens
         {--shop= : Renew a single shop by domain (e.g. example.myshopify.com)}
         {--days= : Override renewal window in days (defaults to config)}
-        {--dry-run : List shops that would be renewed without dispatching jobs}';
+        {--dry-run : List shops that would be renewed without dispatching jobs}
+        {--queue= : Queue name for dispatched jobs (overrides config)}
+        {--connection= : Queue connection for dispatched jobs (overrides config)}';
 
     protected $description = 'Dispatch queue jobs to renew expiring offline tokens before the refresh token expires (optional; requires SHOPIFY_EXPIRING_OFFLINE_TOKENS)';
 
@@ -76,7 +79,7 @@ class RefreshExpiringOfflineTokensCommand extends Command
         $query->chunkById(100, function ($shops) use (&$dispatched, &$failed, $days) {
             foreach ($shops as $shop) {
                 try {
-                    RefreshShopOfflineTokenJob::dispatch($shop, $days);
+                    $this->configureJobDispatch(RefreshShopOfflineTokenJob::dispatch($shop, $days));
                     $dispatched++;
                 } catch (\Throwable $e) {
                     $this->warn("  [FAILED] {$shop->name}: {$e->getMessage()}");
@@ -94,5 +97,26 @@ class RefreshExpiringOfflineTokensCommand extends Command
         $this->info("Dispatched {$dispatched} renewal job(s).".($failed > 0 ? " {$failed} shop(s) failed and were skipped." : ''));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Apply queue/connection from CLI options or config to a pending dispatch.
+     */
+    protected function configureJobDispatch(PendingDispatch $dispatch): PendingDispatch
+    {
+        $connection = $this->option('connection')
+            ?: (Util::getShopifyConfig('job_connections')['refresh_expiring_offline_tokens'] ?? null);
+        $queue = $this->option('queue')
+            ?: (Util::getShopifyConfig('job_queues')['refresh_expiring_offline_tokens'] ?? null);
+
+        if ($connection) {
+            $dispatch->onConnection($connection);
+        }
+
+        if ($queue) {
+            $dispatch->onQueue($queue);
+        }
+
+        return $dispatch;
     }
 }

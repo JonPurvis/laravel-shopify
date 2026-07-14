@@ -150,4 +150,97 @@ class MigrateExpiringOfflineTokensCommandTest extends TestCase
         $shopSucceeding->refresh();
         $this->assertNotNull($shopSucceeding->shopify_offline_refresh_token);
     }
+
+    public function testDispatchesJobsToConfiguredQueue(): void
+    {
+        Queue::fake();
+
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', true);
+        $this->app['config']->set('shopify-app.job_queues', [
+            'migrate_expiring_offline_tokens' => 'shopify-tokens',
+        ]);
+
+        factory($this->model)->create([
+            'password' => 'shpat_legacy',
+            'shopify_offline_refresh_token' => null,
+        ]);
+
+        $this
+            ->artisan('shopify-app:migrate-expiring-offline-tokens')
+            ->expectsOutput('Dispatched 1 migration job(s).')
+            ->assertExitCode(0);
+
+        Queue::assertPushed(MigrateShopTokenJob::class, function ($job) {
+            return $job->queue === 'shopify-tokens';
+        });
+    }
+
+    public function testDispatchesJobsToConfiguredConnection(): void
+    {
+        Queue::fake();
+
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', true);
+        $this->app['config']->set('shopify-app.job_connections', [
+            'migrate_expiring_offline_tokens' => 'custom_connection',
+        ]);
+
+        factory($this->model)->create([
+            'password' => 'shpat_legacy',
+            'shopify_offline_refresh_token' => null,
+        ]);
+
+        $this
+            ->artisan('shopify-app:migrate-expiring-offline-tokens')
+            ->expectsOutput('Dispatched 1 migration job(s).')
+            ->assertExitCode(0);
+
+        Queue::assertPushed(MigrateShopTokenJob::class, function ($job) {
+            return $job->connection === 'custom_connection';
+        });
+    }
+
+    public function testQueueOptionOverridesConfiguredQueue(): void
+    {
+        Queue::fake();
+
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', true);
+        $this->app['config']->set('shopify-app.job_queues', [
+            'migrate_expiring_offline_tokens' => 'from-config',
+        ]);
+
+        factory($this->model)->create([
+            'password' => 'shpat_legacy',
+            'shopify_offline_refresh_token' => null,
+        ]);
+
+        $this
+            ->artisan('shopify-app:migrate-expiring-offline-tokens --queue=from-cli')
+            ->expectsOutput('Dispatched 1 migration job(s).')
+            ->assertExitCode(0);
+
+        Queue::assertPushed(MigrateShopTokenJob::class, function ($job) {
+            return $job->queue === 'from-cli';
+        });
+    }
+
+    public function testDispatchesJobsWithoutQueueOrConnectionByDefault(): void
+    {
+        Queue::fake();
+
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', true);
+
+        factory($this->model)->create([
+            'password' => 'shpat_legacy',
+            'shopify_offline_refresh_token' => null,
+        ]);
+
+        $this
+            ->artisan('shopify-app:migrate-expiring-offline-tokens')
+            ->expectsOutput('Dispatched 1 migration job(s).')
+            ->assertExitCode(0);
+
+        Queue::assertPushed(MigrateShopTokenJob::class, function ($job) {
+            return $job->queue === null && $job->connection === null;
+        });
+    }
 }

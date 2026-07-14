@@ -174,4 +174,101 @@ class RefreshExpiringOfflineTokensCommandTest extends TestCase
         $shop->refresh();
         $this->assertSame('shpat_after_refresh', $shop->getAccessToken()->toNative());
     }
+
+    public function testDispatchesJobsToConfiguredQueue(): void
+    {
+        Queue::fake();
+
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', true);
+        $this->app['config']->set('shopify-app.job_queues', [
+            'refresh_expiring_offline_tokens' => 'shopify-tokens',
+        ]);
+
+        factory($this->model)->create([
+            'password' => 'shpat_one',
+            'shopify_offline_refresh_token' => Crypt::encryptString('shprt_one'),
+            'shopify_offline_refresh_token_expires_at' => Carbon::now()->addDays(7),
+        ]);
+
+        $this
+            ->artisan('shopify-app:refresh-expiring-offline-tokens')
+            ->expectsOutput('Dispatched 1 renewal job(s).')
+            ->assertExitCode(0);
+
+        Queue::assertPushed(RefreshShopOfflineTokenJob::class, function ($job) {
+            return $job->queue === 'shopify-tokens';
+        });
+    }
+
+    public function testDispatchesJobsToConfiguredConnection(): void
+    {
+        Queue::fake();
+
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', true);
+        $this->app['config']->set('shopify-app.job_connections', [
+            'refresh_expiring_offline_tokens' => 'custom_connection',
+        ]);
+
+        factory($this->model)->create([
+            'password' => 'shpat_one',
+            'shopify_offline_refresh_token' => Crypt::encryptString('shprt_one'),
+            'shopify_offline_refresh_token_expires_at' => Carbon::now()->addDays(7),
+        ]);
+
+        $this
+            ->artisan('shopify-app:refresh-expiring-offline-tokens')
+            ->expectsOutput('Dispatched 1 renewal job(s).')
+            ->assertExitCode(0);
+
+        Queue::assertPushed(RefreshShopOfflineTokenJob::class, function ($job) {
+            return $job->connection === 'custom_connection';
+        });
+    }
+
+    public function testQueueOptionOverridesConfiguredQueue(): void
+    {
+        Queue::fake();
+
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', true);
+        $this->app['config']->set('shopify-app.job_queues', [
+            'refresh_expiring_offline_tokens' => 'from-config',
+        ]);
+
+        factory($this->model)->create([
+            'password' => 'shpat_one',
+            'shopify_offline_refresh_token' => Crypt::encryptString('shprt_one'),
+            'shopify_offline_refresh_token_expires_at' => Carbon::now()->addDays(7),
+        ]);
+
+        $this
+            ->artisan('shopify-app:refresh-expiring-offline-tokens --queue=from-cli')
+            ->expectsOutput('Dispatched 1 renewal job(s).')
+            ->assertExitCode(0);
+
+        Queue::assertPushed(RefreshShopOfflineTokenJob::class, function ($job) {
+            return $job->queue === 'from-cli';
+        });
+    }
+
+    public function testDispatchesJobsWithoutQueueOrConnectionByDefault(): void
+    {
+        Queue::fake();
+
+        $this->app['config']->set('shopify-app.expiring_offline_tokens', true);
+
+        factory($this->model)->create([
+            'password' => 'shpat_one',
+            'shopify_offline_refresh_token' => Crypt::encryptString('shprt_one'),
+            'shopify_offline_refresh_token_expires_at' => Carbon::now()->addDays(7),
+        ]);
+
+        $this
+            ->artisan('shopify-app:refresh-expiring-offline-tokens')
+            ->expectsOutput('Dispatched 1 renewal job(s).')
+            ->assertExitCode(0);
+
+        Queue::assertPushed(RefreshShopOfflineTokenJob::class, function ($job) {
+            return $job->queue === null && $job->connection === null;
+        });
+    }
 }

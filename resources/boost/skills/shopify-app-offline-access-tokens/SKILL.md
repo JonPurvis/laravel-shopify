@@ -14,6 +14,8 @@ You are enabling or operating **Shopify expiring offline access tokens** in **yo
 - `SHOPIFY_REFRESH_OFFLINE_TOKEN_BEFORE_API_CALL` → `refresh_offline_token_before_api_call` — when `true`, each `api()` / `apiHelper()` call re-checks token expiry and rebuilds the cached client if within the refresh skew (for long-running jobs).
 - `SHOPIFY_OFFLINE_ACCESS_TOKEN_REFRESH_SKEW` → `offline_access_token_refresh_skew_seconds` — refresh this many seconds **before** access token expiry.
 - `SHOPIFY_OFFLINE_REFRESH_TOKEN_RENEWAL_DAYS` → `offline_refresh_token_renewal_days` — shops whose refresh token expires within this many days are queued for renewal by the refresh CLI (default `14`).
+- `SHOPIFY_MIGRATE_OFFLINE_TOKENS_JOB_QUEUE` / `SHOPIFY_MIGRATE_OFFLINE_TOKENS_JOB_CONNECTION` → `job_queues.migrate_expiring_offline_tokens` / `job_connections.migrate_expiring_offline_tokens` — queue targeting for the migrate Artisan command (overridable with `--queue=` / `--connection=`).
+- `SHOPIFY_REFRESH_OFFLINE_TOKENS_JOB_QUEUE` / `SHOPIFY_REFRESH_OFFLINE_TOKENS_JOB_CONNECTION` → `job_queues.refresh_expiring_offline_tokens` / `job_connections.refresh_expiring_offline_tokens` — same for the refresh Artisan command.
 
 Read the package README for policy notes (e.g. public apps after Shopify’s cutoff dates).
 
@@ -42,7 +44,7 @@ Enabling the flag does **not** upgrade shops that only have a legacy non-expirin
 - **`Osiset\ShopifyApp\Messaging\Jobs\MigrateShopTokenJob`** — dispatched by the Artisan command or your own scheduler; one shop per job.
 - **`Osiset\ShopifyApp\Actions\MigrateShopToExpiringOfflineAccessToken`** — invoke per shop from your code; inspect `migrated`, `skipped`, `reason`, `error` in the returned array.
 - **`ApiHelper::exchangeNonExpiringOfflineTokenForExpiring($shopDomain, $currentToken)`** — [Shopify Step 4](https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/offline-access-tokens#step-4-migrate-existing-tokens) token exchange; then persist via `ShopCommand::setAccessToken` with refresh + expiry fields.
-- **`php artisan shopify-app:migrate-expiring-offline-tokens`** — optional CLI (`--dry-run`, `--shop=`). Chunks shops and dispatches queue jobs (Vapor/serverless-safe). Success revokes the old offline token (one-way).
+- **`php artisan shopify-app:migrate-expiring-offline-tokens`** — optional CLI (`--dry-run`, `--shop=`, `--queue=`, `--connection=`). Chunks shops and dispatches queue jobs (Vapor/serverless-safe). Defaults to the app queue; set `SHOPIFY_MIGRATE_OFFLINE_TOKENS_JOB_QUEUE` / `SHOPIFY_MIGRATE_OFFLINE_TOKENS_JOB_CONNECTION` or use CLI overrides for a dedicated worker. Success revokes the old offline token (one-way).
 
 Alternative: merchant re-auth (OAuth or session token exchange) also acquires expiring tokens when the flag is on.
 
@@ -51,7 +53,7 @@ Alternative: merchant re-auth (OAuth or session token exchange) also acquires ex
 Refresh tokens expire after ~90 days. Shops with no API activity can lapse if nothing triggers a refresh.
 
 - **`Osiset\ShopifyApp\Messaging\Jobs\RefreshShopOfflineTokenJob`** — dispatched by the refresh Artisan command; one shop per job.
-- **`php artisan shopify-app:refresh-expiring-offline-tokens`** — optional CLI (`--dry-run`, `--shop=`, `--days=`). Queues renewal for shops whose refresh token expires within `offline_refresh_token_renewal_days` (default 14).
+- **`php artisan shopify-app:refresh-expiring-offline-tokens`** — optional CLI (`--dry-run`, `--shop=`, `--days=`, `--queue=`, `--connection=`). Queues renewal for shops whose refresh token expires within `offline_refresh_token_renewal_days` (default 14). Defaults to the app queue; set `SHOPIFY_REFRESH_OFFLINE_TOKENS_JOB_QUEUE` / `SHOPIFY_REFRESH_OFFLINE_TOKENS_JOB_CONNECTION` or use CLI overrides for a dedicated worker.
 - **Scheduler:** the package does **not** auto-register a schedule. In **your** app:
 
 ```php
