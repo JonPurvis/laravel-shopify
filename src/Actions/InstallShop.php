@@ -3,7 +3,9 @@
 namespace Osiset\ShopifyApp\Actions;
 
 use Exception;
+use Gnikyt\BasicShopifyAPI\Session;
 use Illuminate\Support\Carbon;
+use Osiset\ShopifyApp\Contracts\ApiHelper as IApiHelper;
 use Osiset\ShopifyApp\Contracts\Commands\Shop as IShopCommand;
 use Osiset\ShopifyApp\Contracts\Queries\Shop as IShopQuery;
 use Osiset\ShopifyApp\Contracts\ShopModel as IShopModel;
@@ -19,6 +21,7 @@ class InstallShop
     public function __construct(
         protected IShopQuery $shopQuery,
         protected IShopCommand $shopCommand,
+        protected IApiHelper $apiHelper,
         protected VerifyThemeSupport $verifyThemeSupport
     ) {
     }
@@ -32,7 +35,10 @@ class InstallShop
             $shop = $this->shopQuery->getByDomain($shopDomain);
         }
 
-        $apiHelper = $shop->apiHelper();
+        $apiHelper = $this->apiHelper->make(new Session(
+            $shop->getDomain()->toNative(),
+            $shop->getAccessToken()->toNative()
+        ));
         $grantMode = $shop->hasOfflineAccess()
             ? AuthMode::fromNative(strtoupper((string) Util::getShopifyConfig('api_grant_mode', $shop)))
             : AuthMode::OFFLINE;

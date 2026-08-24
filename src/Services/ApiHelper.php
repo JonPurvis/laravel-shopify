@@ -205,6 +205,26 @@ class ApiHelper implements IApiHelper
     }
 
     /**
+     * {@inheritdoc}
+     */
+    public function exchangeNonExpiringOfflineTokenForExpiring(
+        string $shopDomain,
+        string $nonExpiringOfflineAccessToken
+    ): ResponseAccess {
+        $this->make(new Session($shopDomain, $nonExpiringOfflineAccessToken));
+
+        return $this->oauthAccessTokenPost([
+            'client_id' => $this->api->getOptions()->getApiKey(),
+            'client_secret' => $this->api->getOptions()->getApiSecret(),
+            'grant_type' => 'urn:ietf:params:oauth:grant-type:token-exchange',
+            'subject_token' => $nonExpiringOfflineAccessToken,
+            'subject_token_type' => 'urn:shopify:params:oauth:token-type:offline-access-token',
+            'requested_token_type' => 'urn:shopify:params:oauth:token-type:offline-access-token',
+            'expiring' => 1,
+        ]);
+    }
+
+    /**
      * POST /admin/oauth/access_token (JSON body).
      *
      * @param array $json

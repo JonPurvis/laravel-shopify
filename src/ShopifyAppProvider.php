@@ -22,6 +22,8 @@ use Osiset\ShopifyApp\Actions\GetPlanUrl as GetPlanUrlAction;
 use Osiset\ShopifyApp\Actions\InstallShop as InstallShopAction;
 use Osiset\ShopifyApp\Actions\VerifyThemeSupport as VerifyThemeSupportAction;
 use Osiset\ShopifyApp\Console\AddVariablesCommand;
+use Osiset\ShopifyApp\Console\MigrateExpiringOfflineTokensCommand;
+use Osiset\ShopifyApp\Console\RefreshExpiringOfflineTokensCommand;
 use Osiset\ShopifyApp\Console\WebhookJobMakeCommand;
 use Osiset\ShopifyApp\Contracts\ApiHelper as IApiHelper;
 use Osiset\ShopifyApp\Contracts\Commands\Charge as IChargeCommand;
@@ -89,6 +91,8 @@ class ShopifyAppProvider extends ServiceProvider
 
         $this->commands([
             AddVariablesCommand::class,
+            MigrateExpiringOfflineTokensCommand::class,
+            RefreshExpiringOfflineTokensCommand::class,
             WebhookJobMakeCommand::class,
         ]);
 
@@ -138,6 +142,7 @@ class ShopifyAppProvider extends ServiceProvider
             return new InstallShopAction(
                 $app->make(IShopQuery::class),
                 $app->make(IShopCommand::class),
+                $app->make(IApiHelper::class),
                 $app->make(VerifyThemeSupportAction::class)
             );
         });

@@ -27,13 +27,14 @@ class OfflineAccessTokenRefresher
     /**
      * Refresh the shop's offline access token if it is expired or near expiry.
      *
-     * @param ShopModel $shop
+     * @param ShopModel  $shop
+     * @param int|null   $renewalDays Override the refresh-token renewal window in days (defaults to config)
      *
      * @throws OAuthTokenRefreshException
      *
      * @return void
      */
-    public function refreshIfNeeded(ShopModel $shop): void
+    public function refreshIfNeeded(ShopModel $shop, ?int $renewalDays = null): void
     {
         if (! Util::getShopifyConfig('expiring_offline_tokens', $shop)) {
             return;
@@ -43,14 +44,14 @@ class OfflineAccessTokenRefresher
             return;
         }
 
-        if (! $this->accessTokenNeedsRefresh($shop)) {
+        if (! $this->offlineTokenNeedsRefresh($shop, $renewalDays)) {
             return;
         }
 
-        Cache::lock('shopify-offline-token:'.$shop->getId()->toNative(), 30)->block(10, function () use ($shop) {
+        Cache::lock('shopify-offline-token:'.$shop->getId()->toNative(), 30)->block(10, function () use ($shop, $renewalDays) {
             $shop->refresh();
 
-            if (! $this->accessTokenNeedsRefresh($shop)) {
+            if (! $this->offlineTokenNeedsRefresh($shop, $renewalDays)) {
                 return;
             }
 
@@ -96,8 +97,23 @@ class OfflineAccessTokenRefresher
         });
     }
 
-    protected function accessTokenNeedsRefresh(ShopModel $shop): bool
+    /**
+     * Whether the shop's offline access token is expired or within the refresh skew window.
+     *
+     * @param ShopModel $shop
+     *
+     * @return bool
+     */
+    public function offlineAccessTokenNeedsRefresh(ShopModel $shop): bool
     {
+        if (! Util::getShopifyConfig('expiring_offline_tokens', $shop)) {
+            return false;
+        }
+
+        if (! $shop->hasExpiringOfflineAccess()) {
+            return false;
+        }
+
         $expiresAt = $shop->shopify_offline_access_token_expires_at ?? null;
         if ($expiresAt === null) {
             return false;
@@ -108,5 +124,59 @@ class OfflineAccessTokenRefresher
         $threshold = $expires->copy()->subSeconds($skew);
 
         return Carbon::now()->greaterThanOrEqualTo($threshold);
+    }
+
+    /**
+     * Whether the shop's offline refresh token expires within the renewal window.
+     *
+     * Already-expired refresh tokens return false because they cannot be renewed
+     * via the refresh-token grant.
+     *
+     * @param ShopModel  $shop
+     * @param int|null   $renewalDays Override the renewal window in days (defaults to config)
+     *
+     * @return bool
+     */
+    public function offlineRefreshTokenNeedsRenewal(ShopModel $shop, ?int $renewalDays = null): bool
+    {
+        if (! Util::getShopifyConfig('expiring_offline_tokens', $shop)) {
+            return false;
+        }
+
+        if (! $shop->hasExpiringOfflineAccess()) {
+            return false;
+        }
+
+        $expiresAt = $shop->shopify_offline_refresh_token_expires_at ?? null;
+        if ($expiresAt === null) {
+            return false;
+        }
+
+        $days = $renewalDays ?? (int) Util::getShopifyConfig('offline_refresh_token_renewal_days', $shop);
+        $expires = $expiresAt instanceof Carbon ? $expiresAt : Carbon::parse((string) $expiresAt);
+        $now = Carbon::now();
+
+        // Expired refresh tokens cannot be renewed via the refresh-token grant.
+        if ($expires->lessThanOrEqualTo($now)) {
+            return false;
+        }
+
+        $threshold = $now->copy()->addDays($days);
+
+        return $threshold->greaterThanOrEqualTo($expires);
+    }
+
+    /**
+     * Whether the shop's offline access or refresh token should be renewed.
+     *
+     * @param ShopModel  $shop
+     * @param int|null   $renewalDays Override the refresh-token renewal window in days (defaults to config)
+     *
+     * @return bool
+     */
+    protected function offlineTokenNeedsRefresh(ShopModel $shop, ?int $renewalDays = null): bool
+    {
+        return $this->offlineAccessTokenNeedsRefresh($shop)
+            || $this->offlineRefreshTokenNeedsRenewal($shop, $renewalDays);
     }
 }

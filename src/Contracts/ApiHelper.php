@@ -94,6 +94,21 @@ interface ApiHelper
     public function refreshOfflineAccessToken(string $refreshToken): ResponseAccess;
 
     /**
+     * Exchange a non-expiring offline access token for an expiring one (one-way per shop).
+     *
+     * @link https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/offline-access-tokens#step-4-migrate-existing-tokens
+     *
+     * @param string $shopDomain                  The shop domain (e.g. example.myshopify.com).
+     * @param string $nonExpiringOfflineAccessToken The current permanent offline access token.
+     *
+     * @return ResponseAccess
+     */
+    public function exchangeNonExpiringOfflineTokenForExpiring(
+        string $shopDomain,
+        string $nonExpiringOfflineAccessToken
+    ): ResponseAccess;
+
+    /**
      * Get the script tags for the shop.
      *
      * @param array $params The params to set to the request.

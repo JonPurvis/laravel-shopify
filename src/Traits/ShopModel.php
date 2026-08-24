@@ -7,6 +7,9 @@ use Gnikyt\BasicShopifyAPI\Session;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
+use Osiset\ShopifyApp\Actions\MigrateShopToExpiringOfflineAccessToken;
 use Osiset\ShopifyApp\Contracts\ApiHelper as IApiHelper;
 use Osiset\ShopifyApp\Contracts\Objects\Values\AccessToken as AccessTokenValue;
 use Osiset\ShopifyApp\Contracts\Objects\Values\ShopDomain as ShopDomainValue;
@@ -157,6 +160,20 @@ trait ShopModel
     }
 
     /**
+     * {@inheritdoc}
+     */
+    public function hasCorruptExpiringTokenState(): bool
+    {
+        if (! Util::getShopifyConfig('expiring_offline_tokens', $this)) {
+            return false;
+        }
+
+        return ! empty($this->shopify_offline_access_token_expires_at)
+            && empty($this->shopify_offline_refresh_token)
+            && Carbon::now()->greaterThan($this->shopify_offline_access_token_expires_at);
+    }
+
+    /**
      * {@inheritDoc}
      */
     public function setSessionContext(SessionContext $session): void
@@ -175,18 +192,34 @@ trait ShopModel
     /**
      * {@inheritdoc}
      */
+    public function offlineAccessTokenIsFresh(): bool
+    {
+        return ! app(OfflineAccessTokenRefresher::class)->offlineAccessTokenNeedsRefresh($this);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function refreshOfflineAccessTokenIfNeeded(): void
+    {
+        app(OfflineAccessTokenRefresher::class)->refreshIfNeeded($this);
+        $this->resetApiClient();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function resetApiClient(): void
+    {
+        $this->apiHelper = null;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function apiHelper(): IApiHelper
     {
-        if ($this->apiHelper === null) {
-            app(OfflineAccessTokenRefresher::class)->refreshIfNeeded($this);
-
-            // Set the session
-            $session = new Session(
-                $this->getDomain()->toNative(),
-                $this->getAccessToken()->toNative()
-            );
-            $this->apiHelper = resolve(IApiHelper::class)->make($session);
-        }
+        $this->ensureApiClientIsReady();
 
         return $this->apiHelper;
     }
@@ -196,10 +229,59 @@ trait ShopModel
      */
     public function api(): BasicShopifyAPI
     {
-        if ($this->apiHelper === null) {
-            $this->apiHelper();
-        }
+        $this->ensureApiClientIsReady();
 
         return $this->apiHelper->getApi();
+    }
+
+    /**
+     * Re-check token expiry and rebuild the cached client when configured or not yet built.
+     *
+     * @return void
+     */
+    protected function ensureApiClientIsReady(): void
+    {
+        if (Util::getShopifyConfig('refresh_offline_token_before_api_call', $this)
+            && $this->apiHelper !== null
+            && app(OfflineAccessTokenRefresher::class)->offlineAccessTokenNeedsRefresh($this)
+        ) {
+            $this->resetApiClient();
+        }
+
+        if ($this->apiHelper === null) {
+            $this->buildApiHelper();
+        }
+    }
+
+    /**
+     * Build the API helper with lazy migration, token refresh, and a fresh session.
+     *
+     * @return void
+     */
+    protected function buildApiHelper(): void
+    {
+        if (Util::getShopifyConfig('auto_migrate_legacy', $this)
+            && Util::getShopifyConfig('expiring_offline_tokens', $this)
+            && ! $this->hasExpiringOfflineAccess()
+            && $this->hasOfflineAccess()
+        ) {
+            try {
+                app(MigrateShopToExpiringOfflineAccessToken::class)($this);
+                $this->refresh();
+            } catch (\Throwable $e) {
+                Log::warning('On-the-fly Shopify offline token migration failed.', [
+                    'shop' => $this->getDomain()->toNative(),
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        app(OfflineAccessTokenRefresher::class)->refreshIfNeeded($this);
+
+        $session = new Session(
+            $this->getDomain()->toNative(),
+            $this->getAccessToken()->toNative()
+        );
+        $this->apiHelper = resolve(IApiHelper::class)->make($session);
     }
 }

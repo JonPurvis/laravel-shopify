@@ -116,6 +116,10 @@ class VerifyShopify
         $tokenSource = $this->getAccessTokenFromRequest($request);
 
         if ($tokenSource === null) {
+            if (!Util::isMPAApplication() && $this->isApiRequest($request)) {
+                throw new HttpException(SessionToken::EXCEPTION_INVALID, Response::HTTP_BAD_REQUEST);
+            }
+
             $forbiddenMiddlewareMatches = array_intersect(
                 Util::getShopifyConfig('forbidden_web_middleware_groups'),
                 $request->route()?->middleware() ?? []
@@ -490,8 +494,32 @@ class VerifyShopify
         return $formatValue($value);
     }
 
+    protected function isApiRoutePath(string $path): bool
+    {
+        $prefixes = Util::getShopifyConfig('api_route_prefixes');
+
+        if (empty($prefixes)) {
+            return false;
+        }
+
+        $path = ltrim($path, '/');
+
+        foreach ($prefixes as $prefix) {
+            $prefix = trim($prefix, '/');
+            if ($prefix === '') {
+                continue;
+            }
+
+            if ($path === $prefix || Str::startsWith($path, $prefix.'/')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
-     * Determine if the request is AJAX or expects JSON.
+     * Determine if the request is an API request.
      *
      * @param Request $request The request object.
      *
@@ -499,7 +527,7 @@ class VerifyShopify
      */
     protected function isApiRequest(Request $request): bool
     {
-        return $request->ajax() || $request->expectsJson();
+        return $request->ajax() || $request->expectsJson() || $this->isApiRoutePath($request->path());
     }
 
     /**
@@ -513,7 +541,7 @@ class VerifyShopify
     {
         $shop = $this->shopQuery->getByDomain(ShopDomain::fromRequest($request), [], true);
 
-        return $shop && $shop->password && ! $shop->trashed();
+        return $shop && $shop->password && ! $shop->trashed() && ! $shop->hasCorruptExpiringTokenState();
     }
 
     /**
@@ -527,7 +555,7 @@ class VerifyShopify
     {
         $shop = $this->shopQuery->getByDomain(ShopDomain::fromRequest($request), [], true);
 
-        return $shop && $shop->password && ! $shop->trashed() ? $shop : null;
+        return $shop && $shop->password && ! $shop->trashed() && ! $shop->hasCorruptExpiringTokenState() ? $shop : null;
     }
 
     /**
